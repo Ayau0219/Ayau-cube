@@ -1,1 +1,234 @@
-Hello
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ルービックキューブタイマー</title>
+  <link rel="icon" href="images/ayau-cube.webp" type="image/x-icon">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    h1, p {
+      margin: 10px 0;
+      text-align: center;
+    }
+    .main-container {
+      flex: 1;
+      display: flex;
+      padding: 10px;
+      gap: 20px;
+      height: 100%;
+    }
+    .table-container {
+      flex: 0.3; /* 左30% */
+      display: flex;
+    }
+    .table-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    thead, tbody tr {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+    tbody {
+      display: block;
+      flex: 1;               /* 余白を埋める */
+      overflow-y: auto;      /* 縦スクロール */
+      overflow-x: hidden;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+      position: sticky;
+      top: 0;
+    }
+    .timer-container {
+      flex: 0.7; /* 右70% */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start; /* ← 上寄せ */
+      padding-top: 80px;           /* ← 高さ調整 */
+    }
+    #timer {
+      font-size: 250px;
+      margin: 20px 0;
+      transition: color 0.3s;
+    }
+    .ready {
+      color: red;
+    }
+    #stats {
+      margin: 10px 0;
+      font-size: 1.4rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>ルービックキューブ タイマー</h1>
+  <p>スペースキーを2秒長押し → 離したらスタート<br>押した瞬間にストップ</p>
+
+  <div class="main-container">
+    <!-- 左：記録表 -->
+    <div class="table-container">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>試行</th><th>記録 (秒)</th></tr>
+          </thead>
+          <tbody id="records"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 右：タイマー -->
+    <div class="timer-container">
+      <div id="timer">0.000</div>
+      <div id="stats">
+        <p>ao5: <span id="ao5">-</span></p>
+        <p>ao12: <span id="ao12">-</span></p>
+        <p>best: <span id="best">-</span></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let startTime = 0;
+    let timerInterval = null;
+    let running = false;
+    let records = [];
+
+    let holdTimeout = null;
+    let ready = false;
+
+    const timerDisplay = document.getElementById("timer");
+    const recordsTable = document.getElementById("records");
+    const ao5Display = document.getElementById("ao5");
+    const ao12Display = document.getElementById("ao12");
+    const bestDisplay = document.getElementById("best");
+
+    // ---- localStorageから記録を読み込み ----
+    window.onload = () => {
+      const saved = localStorage.getItem("cubeRecords");
+      if (saved) {
+        records = JSON.parse(saved);
+        renderRecords();
+        updateStats();
+      }
+    };
+
+    function saveRecords() {
+      localStorage.setItem("cubeRecords", JSON.stringify(records));
+    }
+
+    function startTimer() {
+      startTime = performance.now();
+      timerInterval = setInterval(updateTimer, 10);
+      running = true;
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      running = false;
+      let time = (performance.now() - startTime) / 1000;
+      time = parseFloat(time.toFixed(3));
+      records.push(time);
+      saveRecords();
+      renderRecords();
+      updateStats();
+      timerDisplay.textContent = time.toFixed(3);
+    }
+
+    function updateTimer() {
+      let time = (performance.now() - startTime) / 1000;
+      timerDisplay.textContent = time.toFixed(3);
+    }
+
+    function renderRecords() {
+      recordsTable.innerHTML = "";
+      // 最新の記録を上に表示
+      records.slice().reverse().forEach((t, i) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${records.length - i}</td><td>${t.toFixed(3)}</td>`;
+        recordsTable.appendChild(row);
+      });
+    }
+
+    // ---- 公式ルールの平均計算 (best/worst除外) ----
+    function calcWcaAverage(arr) {
+      if (arr.length < 3) return null;
+      let sorted = [...arr].sort((a, b) => a - b);
+      sorted.shift(); // 最小を除外
+      sorted.pop();   // 最大を除外
+      let sum = sorted.reduce((a, b) => a + b, 0);
+      return (sum / sorted.length).toFixed(3);
+    }
+
+    function updateStats() {
+      if (records.length >= 5) {
+        let last5 = records.slice(-5);
+        ao5Display.textContent = calcWcaAverage(last5);
+      }
+      if (records.length >= 12) {
+        let last12 = records.slice(-12);
+        ao12Display.textContent = calcWcaAverage(last12);
+      }
+      if (records.length > 0) {
+        let best = Math.min(...records);
+        bestDisplay.textContent = best.toFixed(3);
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space" && !running && holdTimeout === null) {
+        e.preventDefault();
+        // 2秒間押し続けたら準備状態
+        holdTimeout = setTimeout(() => {
+          timerDisplay.classList.add("ready");
+          ready = true;
+        }, 1000);
+      } else if (e.code === "Space" && running) {
+        e.preventDefault();
+        stopTimer();
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space") {
+        clearTimeout(holdTimeout);
+        holdTimeout = null;
+        if (ready && !running) {
+          timerDisplay.classList.remove("ready");
+          ready = false;
+          startTimer();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
